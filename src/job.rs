@@ -753,17 +753,35 @@ impl Job {
         .await;
 
         let all_except_configured =
-            job_try!(imap.list_folders_except(context, &configured_folders).await);
+            match imap.list_folders_except(context, &configured_folders).await {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(context, "Listing folders for resync failed: {:#}", e);
+                    return Status::RetryLater;
+                }
+            };
+
+        let mut any_failed = false;
 
         for folder in all_except_configured {
-            job_try!(imap.resync_folder_uids(context, folder).await);
+            if let Err(e) = imap.resync_folder_uids(context, folder).await {
+                warn!(context, "{:#}", e);
+                any_failed = true;
+            }
         }
 
         for folder in configured_folders {
-            job_try!(imap.resync_folder_uids(context, folder).await);
+            if let Err(e) = imap.resync_folder_uids(context, folder).await {
+                warn!(context, "{:#}", e);
+                any_failed = true;
+            }
         }
 
-        Status::Finished(Ok(()))
+        if any_failed {
+            Status::RetryLater
+        } else {
+            Status::Finished(Ok(()))
+        }
     }
 
     async fn markseen_msg_on_imap(&mut self, context: &Context, imap: &mut Imap) -> Status {
