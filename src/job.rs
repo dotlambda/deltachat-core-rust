@@ -7,10 +7,8 @@ use std::{fmt, time::Duration};
 
 use anyhow::{bail, ensure, format_err, Context as _, Error, Result};
 use async_smtp::smtp::response::{Category, Code, Detail};
-use async_std::prelude::*;
 use async_std::task::sleep;
 
-use deltachat_derive::{FromSql, ToSql};
 use futures::StreamExt;
 use itertools::Itertools;
 use rand::{thread_rng, Rng};
@@ -748,7 +746,7 @@ impl Job {
             Config::ConfiguredInboxFolder,
             Config::ConfiguredMvboxFolder,
         ])
-        .filter_map(|c| context.get_config(*c))
+        .filter_map(|c| async move { context.get_config(*c).await.ok_or_log(context).flatten() })
         .collect()
         .await;
 
