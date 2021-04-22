@@ -587,13 +587,13 @@ impl<'a> MimeFactory<'a> {
             )
         };
 
-        // Store protected headers in the inner message.
-        let message = headers
-            .protected
-            .into_iter()
-            .fold(message, |message, header| message.header(header));
-
         let outer_message = if is_encrypted {
+            // Store protected headers in the inner message.
+            let message = headers
+                .protected
+                .into_iter()
+                .fold(message, |message, header| message.header(header));
+
             // Add hidden headers to encrypted payload.
             let mut message = headers
                 .hidden
@@ -666,17 +666,26 @@ impl<'a> MimeFactory<'a> {
                         .build(),
                 )
                 .header(("Subject".to_string(), "...".to_string()))
-        } else if headers.hidden.is_empty() {
-            message
         } else {
-            let message = headers
-                .hidden
-                .into_iter()
-                .fold(message, |message, header| message.header(header));
+            let message = if headers.hidden.is_empty() {
+                message
+            } else {
+                // Store hidden headers in the inner unencrypted message.
+                let message = headers
+                    .hidden
+                    .into_iter()
+                    .fold(message, |message, header| message.header(header));
 
-            PartBuilder::new()
-                .message_type(MimeMultipartType::Mixed)
-                .child(message.build())
+                PartBuilder::new()
+                    .message_type(MimeMultipartType::Mixed)
+                    .child(message.build())
+            };
+
+            // Store protected headers in the outer message.
+            headers
+                .protected
+                .into_iter()
+                .fold(message, |message, header| message.header(header))
         };
 
         // Store the unprotected headers on the outer message.
